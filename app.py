@@ -202,6 +202,21 @@ def convert():
         "yaml": yaml_content,
         "selected_chapters": len(selected)
     })
+import yaml as pyyaml
 
+@app.route('/api/parse-yaml', methods=['POST'])
+def parse_yaml():
+    """
+    前端把 YAML 字符串发过来，后端解析成 JSON，方便前端渲染卡片
+    """
+    data = request.get_json()
+    yaml_text = data.get('yaml', '')
+    
+    try:
+        parsed = pyyaml.safe_load(yaml_text)
+        return jsonify({"success": True, "data": parsed})
+    except Exception as e:
+        return jsonify({"error": "YAML解析失败: " + str(e)}), 400
+    
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

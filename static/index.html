@@ -59,6 +59,31 @@
         .yaml-box {
             margin-top: 15px;
         }
+                /* 可视化预览样式 */
+        .view-toggle { margin: 15px 0; }
+        .view-toggle button { background: #fff; color: #007acc; border: 1px solid #007acc; margin-right: 10px; }
+        .view-toggle button.active { background: #007acc; color: #fff; }
+        
+        .meta-box { background: #e3f2fd; padding: 12px; border-radius: 6px; margin-bottom: 15px; }
+        .char-list { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+        .char-card { background: #f5f5f5; border: 1px solid #ddd; padding: 8px 12px; border-radius: 20px; font-size: 14px; }
+        
+        .scene-box { border: 2px solid #333; margin: 15px 0; background: #fff; }
+        .scene-header { background: #333; color: #fff; padding: 8px 12px; font-weight: bold; }
+        .scene-body { padding: 12px; }
+        .scene-synopsis { color: #666; font-size: 13px; margin-bottom: 10px; font-style: italic; }
+        
+        .element { margin: 8px 0; padding: 8px; border-left: 3px solid #e0e0e0; background: #fafafa; }
+        .element.action { border-left-color: #4caf50; }
+        .element.dialogue { border-left-color: #2196f3; background: #e3f2fd; }
+        .element.voiceover { border-left-color: #9c27b0; font-style: italic; color: #555; }
+        .element.sound_effect { border-left-color: #ff9800; color: #e65100; }
+        .element.low-confidence { border-left: 3px solid #f44336 !important; background: #ffebee !important; }
+        
+        .el-type { font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 3px; }
+        .el-character { font-weight: bold; color: #333; margin-bottom: 3px; }
+        .el-content { line-height: 1.5; }
+        .el-note { font-size: 11px; color: #f44336; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -85,10 +110,11 @@
         <div id="resultContent"></div>
     </div>
 
-    <script>
+        <script>
         let currentFileName = '';
         let currentChapters = [];
         let generatedYaml = '';
+        let currentView = 'raw'; // 'raw' 或 'visual'
 
         // ========== 上传文件 ==========
         function uploadFile() {
@@ -164,13 +190,11 @@
             
             const ids = Array.from(checked).map(cb => parseInt(cb.value));
             
-            // 显示转换中
             const resultBox = document.getElementById('resultBox');
             const resultContent = document.getElementById('resultContent');
             resultBox.style.display = 'block';
             resultContent.innerHTML = '<div class="loading">⏳ AI 正在转换，请等待 30-60 秒...</div>';
             
-            // 禁用按钮
             document.getElementById('convertBtn').disabled = true;
 
             fetch('http://localhost:5000/api/convert', {
@@ -192,22 +216,141 @@
                 
                 generatedYaml = data.yaml;
                 
+                // 显示结果区，带切换按钮
                 resultContent.innerHTML = `
-                    <div class="success">
-                        ✅ 转换完成！已转换 ${data.selected_chapters} 章
+                    <div class="success">✅ 转换完成！已转换 ${data.selected_chapters} 章</div>
+                    <div class="view-toggle">
+                        <button id="btnRaw" class="active" onclick="showRaw()">📄 原始 YAML</button>
+                        <button id="btnVisual" onclick="showVisual()">🎬 可视化预览</button>
+                        <button onclick="downloadYaml()" style="float:right;">⬇️ 下载 YAML</button>
                     </div>
-                    <div class="yaml-box">
-                        <h4>YAML 结果：</h4>
+                    <div id="rawView">
                         <pre>${escapeHtml(data.yaml)}</pre>
-                        <br>
-                        <button onclick="downloadYaml()">⬇️ 下载 YAML 文件</button>
+                    </div>
+                    <div id="visualView" style="display:none;">
+                        ⏳ 正在渲染可视化预览...
                     </div>
                 `;
+                currentView = 'raw';
             })
             .catch(err => {
                 document.getElementById('convertBtn').disabled = false;
                 resultContent.innerHTML = '<div class="error">❌ 错误：' + err + '</div>';
             });
+        }
+
+        // ========== 切换视图 ==========
+        function showRaw() {
+            document.getElementById('rawView').style.display = 'block';
+            document.getElementById('visualView').style.display = 'none';
+            document.getElementById('btnRaw').classList.add('active');
+            document.getElementById('btnVisual').classList.remove('active');
+            currentView = 'raw';
+        }
+
+        function showVisual() {
+            document.getElementById('rawView').style.display = 'none';
+            document.getElementById('visualView').style.display = 'block';
+            document.getElementById('btnRaw').classList.remove('active');
+            document.getElementById('btnVisual').classList.add('active');
+            
+            if (currentView !== 'visual') {
+                currentView = 'visual';
+                loadVisual();
+            }
+        }
+
+        // ========== 加载可视化 ==========
+        function loadVisual() {
+            const container = document.getElementById('visualView');
+            container.innerHTML = '⏳ 正在解析 YAML...';
+            
+            fetch('http://localhost:5000/api/parse-yaml', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({yaml: generatedYaml})
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.success) {
+                    container.innerHTML = renderScreenplay(result.data);
+                } else {
+                    container.innerHTML = '<div class="error">❌ 可视化解析失败：' + result.error + '</div>';
+                }
+            })
+            .catch(err => {
+                container.innerHTML = '<div class="error">❌ 网络错误：' + err + '</div>';
+            });
+        }
+
+        // ========== 渲染剧本卡片 ==========
+        function renderScreenplay(data) {
+            if (!data || !data.screenplay) {
+                return '<div class="error">YAML 结构不符合预期（缺少 screenplay 根节点）</div>';
+            }
+            
+            const sp = data.screenplay;
+            let html = '';
+            
+            // 元数据
+            if (sp.metadata) {
+                const meta = sp.metadata;
+                html += `<div class="meta-box">
+                    <strong>🎬 ${meta.title || '未命名剧本'}</strong><br>
+                    <small>来源：${(meta.source_chapters || []).join(', ')}</small>
+                </div>`;
+            }
+            
+            // 角色表
+            if (sp.dramatis_personae && sp.dramatis_personae.length > 0) {
+                html += '<h4>👥 角色</h4><div class="char-list">';
+                sp.dramatis_personae.forEach(char => {
+                    html += `<div class="char-card">
+                        <strong>${char.name || '未命名'}</strong>
+                        ${char.description ? '<br><small>' + char.description + '</small>' : ''}
+                    </div>`;
+                });
+                html += '</div>';
+            }
+            
+            // 场景
+            if (sp.scenes && sp.scenes.length > 0) {
+                sp.scenes.forEach((scene, idx) => {
+                    const heading = scene.heading || {};
+                    const location = heading.location || '未知地点';
+                    const time = heading.time_of_day || '未知时间';
+                    const intExt = heading.interior_exterior || 'INT';
+                    
+                    html += `<div class="scene-box">
+                        <div class="scene-header">
+                            ${intExt}. ${location} - ${time}
+                        </div>
+                        <div class="scene-body">
+                            ${scene.synopsis ? `<div class="scene-synopsis">${scene.synopsis}</div>` : ''}
+                    `;
+                    
+                    if (scene.elements && scene.elements.length > 0) {
+                        scene.elements.forEach(el => {
+                            const type = el.type || 'action';
+                            const conf = (el.notes && el.notes.confidence) ? el.notes.confidence : 1.0;
+                            const lowConf = conf < 0.8 ? 'low-confidence' : '';
+                            
+                            html += `<div class="element ${type} ${lowConf}">
+                                <div class="el-type">${type}</div>
+                                ${el.character_id ? `<div class="el-character">${el.character_id}</div>` : ''}
+                                <div class="el-content">${el.content || ''}</div>
+                                ${lowConf ? `<div class="el-note">⚠️ AI 置信度较低 (${conf})，建议人工复核</div>` : ''}
+                            </div>`;
+                        });
+                    }
+                    
+                    html += '</div></div>';
+                });
+            } else {
+                html += '<div class="error">未检测到场景数据</div>';
+            }
+            
+            return html;
         }
 
         // ========== 下载 YAML ==========
@@ -227,7 +370,7 @@
             URL.revokeObjectURL(url);
         }
 
-        // ========== 工具函数：转义 HTML ==========
+        // ========== 工具函数 ==========
         function escapeHtml(text) {
             return text
                 .replace(/&/g, "&amp;")
