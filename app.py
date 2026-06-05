@@ -217,6 +217,116 @@ def parse_yaml():
         return jsonify({"success": True, "data": parsed})
     except Exception as e:
         return jsonify({"error": "YAML解析失败: " + str(e)}), 400
+@app.route('/api/export', methods=['POST'])
+def export_file():
+    """
+    导出剧本为不同格式
+    format: 'yaml' 或 'txt'
+    """
+    data = request.get_json()
+    yaml_text = data.get('yaml', '')
+    format_type = data.get('format', 'yaml')
+    
+    if not yaml_text:
+        return jsonify({"error": "没有内容"}), 400
+    
+    if format_type == 'yaml':
+        # 直接返回 YAML
+        return jsonify({
+            "success": True,
+            "content": yaml_text,
+            "filename": "screenplay.yaml"
+        })
+    
+    elif format_type == 'txt':
+        # 转换为标准剧本文本格式
+        try:
+            parsed = pyyaml.safe_load(yaml_text)
+            txt_content = format_as_screenplay_text(parsed)
+            return jsonify({
+                "success": True,
+                "content": txt_content,
+                "filename": "screenplay.txt"
+            })
+        except Exception as e:
+            return jsonify({"error": "格式化失败: " + str(e)}), 400
+    
+    else:
+        return jsonify({"error": "不支持的格式"}), 400
+
+
+def format_as_screenplay_text(data):
+    """
+    把 YAML 结构转为标准剧本文本格式
+    """
+    if not data or 'screenplay' not in data:
+        return "格式错误：缺少 screenplay 根节点"
+    
+    sp = data['screenplay']
+    lines = []
+    
+    # 标题
+    lines.append("=" * 60)
+    lines.append(sp.get('metadata', {}).get('title', '未命名剧本').center(60))
+    lines.append("=" * 60)
+    lines.append("")
+    
+    # 角色表
+    chars = sp.get('dramatis_personae', [])
+    if chars:
+        lines.append("【角色表】")
+        for char in chars:
+            lines.append(f"  {char.get('name', '未命名')} - {char.get('description', '')}")
+        lines.append("")
+    
+    # 场景
+    scenes = sp.get('scenes', [])
+    for idx, scene in enumerate(scenes, 1):
+        heading = scene.get('heading', {})
+        int_ext = heading.get('interior_exterior', 'INT')
+        location = heading.get('location', '未知地点')
+        time = heading.get('time_of_day', '未知时间')
+        
+        lines.append("")
+        lines.append(f"场景 {idx}".center(60, "-"))
+        lines.append(f"{int_ext}. {location} - {time}")
+        lines.append("")
+        
+        if scene.get('synopsis'):
+            lines.append(f"（{scene['synopsis']}）")
+            lines.append("")
+        
+        elements = scene.get('elements', [])
+        for el in elements:
+            el_type = el.get('type', 'action')
+            content = el.get('content', '')
+            char_id = el.get('character_id', '')
+            
+            if el_type == 'action':
+                lines.append(content)
+                lines.append("")
+            elif el_type == 'dialogue':
+                if char_id:
+                    lines.append(f"                    {char_id}")
+                lines.append(f"    {content}")
+                lines.append("")
+            elif el_type == 'voiceover':
+                lines.append(f"【画外音】{char_id}: {content}")
+                lines.append("")
+            elif el_type == 'sound_effect':
+                lines.append(f"【音效】{content}")
+                lines.append("")
+            elif el_type == 'parenthetical':
+                lines.append(f"（{content}）")
+                lines.append("")
+            else:
+                lines.append(content)
+                lines.append("")
+    
+    lines.append("")
+    lines.append("【完】".center(60, "="))
+    
+    return "\n".join(lines)    
     
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>AI小说转剧本工具</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
     <style>
         body { 
             font-family: Arial, sans-serif; 
@@ -217,18 +218,26 @@
                 generatedYaml = data.yaml;
                 
                 // 显示结果区，带切换按钮
-                resultContent.innerHTML = `
+                             resultContent.innerHTML = `
                     <div class="success">✅ 转换完成！已转换 ${data.selected_chapters} 章</div>
                     <div class="view-toggle">
                         <button id="btnRaw" class="active" onclick="showRaw()">📄 原始 YAML</button>
                         <button id="btnVisual" onclick="showVisual()">🎬 可视化预览</button>
-                        <button onclick="downloadYaml()" style="float:right;">⬇️ 下载 YAML</button>
+                        <button id="btnEdit" onclick="showEditor()">✏️ 编辑角色</button>
+                    </div>
+                    <div style="margin:10px 0;">
+                        <span>导出格式：</span>
+                        <button onclick="exportFile('yaml')" style="padding:5px 10px;font-size:12px;">YAML</button>
+                        <button onclick="exportFile('txt')" style="padding:5px 10px;font-size:12px;">剧本文本 (.txt)</button>
                     </div>
                     <div id="rawView">
                         <pre>${escapeHtml(data.yaml)}</pre>
                     </div>
                     <div id="visualView" style="display:none;">
                         ⏳ 正在渲染可视化预览...
+                    </div>
+                    <div id="editView" style="display:none;">
+                        ⏳ 加载编辑器...
                     </div>
                 `;
                 currentView = 'raw';
@@ -283,21 +292,36 @@
             });
         }
 
-        // ========== 渲染剧本卡片 ==========
+        // ========== 渲染剧本卡片（修复版）==========
         function renderScreenplay(data) {
             if (!data || !data.screenplay) {
-                return '<div class="error">YAML 结构不符合预期（缺少 screenplay 根节点）</div>';
+                // 兼容没有 screenplay 根节点的情况
+                if (data && data.metadata) {
+                    data = {screenplay: data};
+                } else {
+                    return '<div class="error">YAML 结构不符合预期</div>';
+                }
             }
             
             const sp = data.screenplay;
             let html = '';
+            
+            // 建立角色ID→名字映射表（关键修复！）
+            const charMap = {};
+            if (sp.dramatis_personae) {
+                sp.dramatis_personae.forEach(char => {
+                    charMap[char.id] = char.name || char.id;
+                    // 如果 character_id 直接存的是名字，也映射
+                    charMap[char.name] = char.name;
+                });
+            }
             
             // 元数据
             if (sp.metadata) {
                 const meta = sp.metadata;
                 html += `<div class="meta-box">
                     <strong>🎬 ${meta.title || '未命名剧本'}</strong><br>
-                    <small>来源：${(meta.source_chapters || []).join(', ')}</small>
+                    <small>来源章节：${(meta.source_chapters || []).join(', ')}</small>
                 </div>`;
             }
             
@@ -335,9 +359,15 @@
                             const conf = (el.notes && el.notes.confidence) ? el.notes.confidence : 1.0;
                             const lowConf = conf < 0.8 ? 'low-confidence' : '';
                             
+                            // 关键修复：用 charMap 把 ID 翻译成名字
+                            let displayName = el.character_id;
+                            if (el.character_id && charMap[el.character_id]) {
+                                displayName = charMap[el.character_id];
+                            }
+                            
                             html += `<div class="element ${type} ${lowConf}">
                                 <div class="el-type">${type}</div>
-                                ${el.character_id ? `<div class="el-character">${el.character_id}</div>` : ''}
+                                ${el.character_id ? `<div class="el-character">${displayName}</div>` : ''}
                                 <div class="el-content">${el.content || ''}</div>
                                 ${lowConf ? `<div class="el-note">⚠️ AI 置信度较低 (${conf})，建议人工复核</div>` : ''}
                             </div>`;
@@ -352,7 +382,6 @@
             
             return html;
         }
-
         // ========== 下载 YAML ==========
         function downloadYaml() {
             if (!generatedYaml) {
@@ -369,7 +398,170 @@
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
+                // ========== 导出文件 ==========
+        function exportFile(format) {
+            if (!generatedYaml) {
+                alert('没有可导出的内容');
+                return;
+            }
+            
+            fetch('http://localhost:5000/api/export', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    yaml: generatedYaml,
+                    format: format
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    alert('导出失败：' + data.error);
+                    return;
+                }
+                // 下载
+                const blob = new Blob([data.content], {type: 'text/plain'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = data.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            })
+            .catch(err => alert('导出错误：' + err));
+        }
 
+        // ========== 切换视图：编辑角色 ==========
+        function showEditor() {
+            document.getElementById('rawView').style.display = 'none';
+            document.getElementById('visualView').style.display = 'none';
+            document.getElementById('editView').style.display = 'block';
+            document.getElementById('btnRaw').classList.remove('active');
+            document.getElementById('btnVisual').classList.remove('active');
+            document.getElementById('btnEdit').classList.add('active');
+            
+            loadEditor();
+        }
+
+        // ========== 加载角色编辑器 ==========
+        function loadEditor() {
+            const container = document.getElementById('editView');
+            container.innerHTML = '⏳ 加载中...';
+            
+            fetch('http://localhost:5000/api/parse-yaml', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({yaml: generatedYaml})
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.success) {
+                    renderEditor(result.data);
+                } else {
+                    container.innerHTML = '<div class="error">加载失败</div>';
+                }
+            })
+            .catch(err => {
+                container.innerHTML = '<div class="error">错误：' + err + '</div>';
+            });
+        }
+
+                   // 辅助：正则转义
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        // ========== 渲染角色编辑器 ==========
+        function renderEditor(data) {
+            const container = document.getElementById('editView');
+            const sp = data.screenplay || data;
+            const chars = sp.dramatis_personae || [];
+            
+            if (chars.length === 0) {
+                container.innerHTML = '<div class="error">没有检测到角色</div>';
+                return;
+            }
+            
+            let html = `<h4>✏️ 编辑角色信息</h4>
+                <p style="color:#666;font-size:13px;">共 <strong>${chars.length}</strong> 个角色。修改后点击保存，剧本中所有引用会自动同步。</p>
+                <div id="charEditorList">`;
+            
+            chars.forEach((char, idx) => {
+                // 关键：用 data-old-name 记住原始名字，用于精确替换
+                html += `
+                    <div style="border:1px solid #ddd;padding:12px;margin:8px 0;border-radius:4px;background:#fafafa;">
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:12px;color:#666;">角色ID：</label>
+                            <input type="text" value="${char.id || ''}" disabled style="background:#eee;width:100%;padding:4px;">
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <label style="font-size:12px;color:#666;">角色名：</label>
+                            <input type="text" id="char_name_${idx}" value="${escapeHtml(char.name || '')}" data-old-name="${escapeHtml(char.name || '')}" style="width:100%;padding:4px;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:#666;">描述：</label>
+                            <input type="text" id="char_desc_${idx}" value="${escapeHtml(char.description || '')}" data-old-desc="${escapeHtml(char.description || '')}" style="width:100%;padding:4px;">
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            html += `<button onclick="saveCharacters()" style="margin-top:10px;">💾 保存到 YAML</button>`;
+            
+            container.innerHTML = html;
+        }
+        
+        // ========== 保存角色（全局精确替换）==========
+        function saveCharacters() {
+            let idx = 0;
+            let changes = 0;
+            
+            while (true) {
+                const nameInput = document.getElementById(`char_name_${idx}`);
+                if (!nameInput) break;  // 没有更多角色了
+                
+                const oldName = nameInput.getAttribute('data-old-name');
+                const newName = nameInput.value;
+                
+                // 如果名字变了，全局精确替换（split/join 不会误伤"沉默"这类包含词）
+                if (oldName && oldName !== newName && oldName !== '') {
+                    const parts = generatedYaml.split(oldName);
+                    if (parts.length > 1) {
+                        generatedYaml = parts.join(newName);
+                        changes += parts.length - 1;
+                        nameInput.setAttribute('data-old-name', newName);
+                    }
+                }
+                
+                // 描述同理
+                const descInput = document.getElementById(`char_desc_${idx}`);
+                if (descInput) {
+                    const oldDesc = descInput.getAttribute('data-old-desc');
+                    const newDesc = descInput.value;
+                    if (oldDesc && oldDesc !== newDesc && oldDesc !== '') {
+                        const parts = generatedYaml.split(oldDesc);
+                        if (parts.length > 1) {
+                            generatedYaml = parts.join(newDesc);
+                            changes += parts.length - 1;
+                            descInput.setAttribute('data-old-desc', newDesc);
+                        }
+                    }
+                }
+                
+                idx++;
+            }
+            
+            // 更新原始 YAML 视图
+            document.getElementById('rawView').innerHTML = '<pre>' + escapeHtml(generatedYaml) + '</pre>';
+            
+            // 如果可视化视图是打开的，刷新它
+            if (currentView === 'visual') {
+                loadVisual();
+            }
+            
+            alert(`✅ 已保存！共修改 ${changes} 处。`);
+        }
         // ========== 工具函数 ==========
         function escapeHtml(text) {
             return text
