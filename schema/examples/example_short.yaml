@@ -1,0 +1,66 @@
+screenplay:
+  metadata:
+    title: 雨夜
+    source_chapters:
+      - 雨夜
+      - 诊断
+      - 重逢
+  dramatis_personae:
+    - id: cm
+      name: 陈默
+      description: 男主角，拿着诊断报告的前夫
+    - id: zw
+      name: 周薇
+      description: 陈默的前妻，穿着睡衣
+  scenes:
+    - heading:
+        location: 楼下
+        time_of_day: NIGHT
+      synopsis: 陈默在雨夜站在前妻楼下，攥着诊断报告。
+      elements:
+        - type: sound_effect
+          content: 雨声持续不断，淅淅沥沥
+          notes:
+            confidence: 0.95
+            adaptation_note: 环境描写转为音效
+        - type: action
+          content: 陈默站在楼下，抬头望着那扇亮着灯的窗户
+          notes:
+            confidence: 0.9
+            adaptation_note: 直接动作描述
+        - type: action
+          content: 他手里攥着一份诊断报告
+          notes:
+            confidence: 0.95
+            adaptation_note: 细节描写转为动作
+    - heading:
+        location: 医院走廊
+        time_of_day: DAY
+      synopsis: 陈默在医院走廊回忆诊断过程。
+      elements:
+        - type: action
+          content: 陈默坐在塑料椅上，盯着地面
+          notes:
+            confidence: 0.95
+            adaptation_note: 直接动作描述
+        - type: voiceover
+          content: 医生说的话像是从很远的地方传来
+          character_id: cm
+          notes:
+            confidence: 0.85
+            adaptation_note: 心理描写转为画外音
+    - heading:
+        location: 前妻家门口
+        time_of_day: NIGHT
+      synopsis: 周薇开门，看到陈默和诊断报告。
+      elements:
+        - type: action
+          content: 门打开，周薇穿着睡衣，头发还湿着
+          notes:
+            confidence: 0.95
+            adaptation_note: 直接动作描述
+        - type: action
+          content: 她看到陈默手里的纸，眼神变了
+          notes:
+            confidence: 0.9
+            adaptation_note: 表情变化转为动作
