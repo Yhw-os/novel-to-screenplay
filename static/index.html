@@ -4,14 +4,61 @@
     <meta charset="UTF-8">
     <title>AI小说转剧本工具</title>
     <style>
-        body { font-family: Arial; max-width: 900px; margin: 30px auto; padding: 20px; background: #f5f5f5; }
-        .box { background: white; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-top: 20px; }
-        button { background: #007acc; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; }
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 900px; 
+            margin: 30px auto; 
+            padding: 20px; 
+            background: #f5f5f5; 
+        }
+        .box { 
+            background: white; 
+            border: 1px solid #ddd; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin-top: 20px; 
+        }
+        button { 
+            background: #007acc; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            cursor: pointer; 
+            border-radius: 4px; 
+            font-size: 14px;
+        }
         button:hover { background: #005fa3; }
-        .chapter-item { border: 1px solid #eee; padding: 10px; margin: 5px 0; border-radius: 4px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .chapter-item { 
+            border: 1px solid #eee; 
+            padding: 10px; 
+            margin: 5px 0; 
+            border-radius: 4px; 
+            display: flex;
+            align-items: center;
+        }
         .chapter-item input { margin-right: 10px; }
-        #result { margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 4px; }
-        .error { background: #ffebee !important; color: #c62828; }
+        .chapter-title { font-weight: bold; }
+        .chapter-preview { color: #666; font-size: 12px; margin-left: 10px; }
+        
+        #result { margin-top: 15px; padding: 10px; border-radius: 4px; }
+        .success { background: #e8f5e9; color: #2e7d32; }
+        .error { background: #ffebee; color: #c62828; }
+        .loading { background: #fff3e0; color: #e65100; }
+        
+        pre {
+            background: #263238;
+            color: #aed581;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 500px;
+            font-size: 13px;
+        }
+        .yaml-box {
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
@@ -27,26 +74,37 @@
 
     <!-- 章节列表 -->
     <div class="box" id="chapterBox" style="display:none;">
-        <h3>📑 步骤 2：选择章节（至少选3章）</h3>
+        <h3>📑 步骤 2：选择章节（建议选3章以上）</h3>
         <div id="chapterList"></div>
-        <button onclick="startConvert()" style="margin-top:15px;">开始转换</button>
+        <button onclick="startConvert()" id="convertBtn" style="margin-top:15px;">开始转换</button>
+    </div>
+
+    <!-- 转换结果 -->
+    <div class="box" id="resultBox" style="display:none;">
+        <h3>🎭 转换结果</h3>
+        <div id="resultContent"></div>
     </div>
 
     <script>
-        let currentChapters = []; // 存章节数据
+        let currentFileName = '';
+        let currentChapters = [];
+        let generatedYaml = '';
 
-        // 上传文件
+        // ========== 上传文件 ==========
         function uploadFile() {
             const fileInput = document.getElementById('fileInput');
-            if (!fileInput.files[0]) {
+            const file = fileInput.files[0];
+            
+            if (!file) {
                 alert('请先选择一个 .txt 文件');
                 return;
             }
 
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            formData.append('file', file);
 
-            document.getElementById('uploadResult').innerHTML = '⏳ 正在解析...';
+            document.getElementById('uploadResult').innerHTML = 
+                '<div class="loading">⏳ 正在解析章节...</div>';
 
             fetch('http://localhost:5000/api/upload', {
                 method: 'POST',
@@ -60,44 +118,121 @@
                     return;
                 }
                 
+                currentFileName = data.filename;
                 currentChapters = data.chapters;
-                document.getElementById('uploadResult').innerHTML = 
-                    '✅ 解析成功！共 ' + data.total_chapters + ' 章';
                 
-                // 显示章节列表
+                document.getElementById('uploadResult').innerHTML = 
+                    '<div class="success">✅ 解析成功！共 ' + data.total_chapters + ' 章</div>';
+                
                 showChapters(data.chapters);
             })
             .catch(err => {
                 document.getElementById('uploadResult').innerHTML = 
-                    '<div class="error">❌ 错误：' + err + '</div>';
+                    '<div class="error">❌ 网络错误：' + err + '</div>';
             });
         }
 
-        // 显示章节勾选列表
+        // ========== 显示章节列表 ==========
         function showChapters(chapters) {
             const box = document.getElementById('chapterBox');
             const list = document.getElementById('chapterList');
             box.style.display = 'block';
             
+            if (chapters.length === 0) {
+                list.innerHTML = '<div class="error">未检测到章节，请检查文件格式</div>';
+                return;
+            }
+            
             list.innerHTML = chapters.map(ch => `
                 <div class="chapter-item">
-                    <label>
-                        <input type="checkbox" value="${ch.id}" class="chapter-check">
-                        <strong>${ch.title}</strong>
-                        <span style="color:#666;font-size:12px;">${ch.content}</span>
+                    <input type="checkbox" value="${ch.id}" id="ch_${ch.id}" class="chapter-check">
+                    <label for="ch_${ch.id}">
+                        <span class="chapter-title">${ch.title}</span>
+                        <span class="chapter-preview">${ch.content}</span>
                     </label>
                 </div>
             `).join('');
         }
 
-        // 开始转换（先占位）
+        // ========== 开始转换 ==========
         function startConvert() {
             const checked = document.querySelectorAll('.chapter-check:checked');
-            if (checked.length < 1) {
-                alert('请至少选择1章（比赛要求3章以上，演示时选1章也行）');
+            if (checked.length === 0) {
+                alert('请至少选择1章');
                 return;
             }
-            alert('下一步：调用AI转换。我们先commit这一步。');
+            
+            const ids = Array.from(checked).map(cb => parseInt(cb.value));
+            
+            // 显示转换中
+            const resultBox = document.getElementById('resultBox');
+            const resultContent = document.getElementById('resultContent');
+            resultBox.style.display = 'block';
+            resultContent.innerHTML = '<div class="loading">⏳ AI 正在转换，请等待 30-60 秒...</div>';
+            
+            // 禁用按钮
+            document.getElementById('convertBtn').disabled = true;
+
+            fetch('http://localhost:5000/api/convert', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    chapter_ids: ids,
+                    filename: currentFileName
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('convertBtn').disabled = false;
+                
+                if (data.error) {
+                    resultContent.innerHTML = '<div class="error">❌ 转换失败：' + data.error + '</div>';
+                    return;
+                }
+                
+                generatedYaml = data.yaml;
+                
+                resultContent.innerHTML = `
+                    <div class="success">
+                        ✅ 转换完成！已转换 ${data.selected_chapters} 章
+                    </div>
+                    <div class="yaml-box">
+                        <h4>YAML 结果：</h4>
+                        <pre>${escapeHtml(data.yaml)}</pre>
+                        <br>
+                        <button onclick="downloadYaml()">⬇️ 下载 YAML 文件</button>
+                    </div>
+                `;
+            })
+            .catch(err => {
+                document.getElementById('convertBtn').disabled = false;
+                resultContent.innerHTML = '<div class="error">❌ 错误：' + err + '</div>';
+            });
+        }
+
+        // ========== 下载 YAML ==========
+        function downloadYaml() {
+            if (!generatedYaml) {
+                alert('没有可下载的内容');
+                return;
+            }
+            const blob = new Blob([generatedYaml], {type: 'text/yaml'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'screenplay.yaml';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // ========== 工具函数：转义 HTML ==========
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
         }
     </script>
 </body>
