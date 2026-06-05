@@ -28,8 +28,8 @@ novel-to-screenplay/
 ├── app.py                 # Flask 后端
 ├── static/index.html      # 前端页面
 ├── docs/                  # 设计文档
-└── schema/                # YAML Schema + 示例
-
+├── schema/                # YAML Schema + 示例
+└── README.md
 演示视频
 
 
