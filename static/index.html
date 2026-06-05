@@ -4,34 +4,100 @@
     <meta charset="UTF-8">
     <title>AI小说转剧本工具</title>
     <style>
-        body { font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px; }
-        .box { border: 2px solid #007acc; padding: 20px; border-radius: 10px; margin-top: 20px; }
-        button { background: #007acc; color: white; border: none; padding: 10px 20px; cursor: pointer; }
-        #result { margin-top: 20px; color: green; }
+        body { font-family: Arial; max-width: 900px; margin: 30px auto; padding: 20px; background: #f5f5f5; }
+        .box { background: white; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        button { background: #007acc; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #005fa3; }
+        .chapter-item { border: 1px solid #eee; padding: 10px; margin: 5px 0; border-radius: 4px; }
+        .chapter-item input { margin-right: 10px; }
+        #result { margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 4px; }
+        .error { background: #ffebee !important; color: #c62828; }
     </style>
 </head>
 <body>
     <h1>🎬 AI 小说转剧本工具</h1>
     
+    <!-- 上传区域 -->
     <div class="box">
-        <h3>步骤 1：测试连接</h3>
-        <button onclick="testServer()">点击测试服务器</button>
-        <div id="result"></div>
+        <h3>📤 步骤 1：上传小说（.txt 格式）</h3>
+        <input type="file" id="fileInput" accept=".txt">
+        <button onclick="uploadFile()">上传并解析章节</button>
+        <div id="uploadResult"></div>
+    </div>
+
+    <!-- 章节列表 -->
+    <div class="box" id="chapterBox" style="display:none;">
+        <h3>📑 步骤 2：选择章节（至少选3章）</h3>
+        <div id="chapterList"></div>
+        <button onclick="startConvert()" style="margin-top:15px;">开始转换</button>
     </div>
 
     <script>
-        // 调用后端测试接口
-        function testServer() {
-            fetch('http://localhost:5000/api/hello')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('result').innerHTML = 
-                        '✅ ' + data.message;
-                })
-                .catch(err => {
-                    document.getElementById('result').innerHTML = 
-                        '❌ 错误：' + err;
-                });
+        let currentChapters = []; // 存章节数据
+
+        // 上传文件
+        function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) {
+                alert('请先选择一个 .txt 文件');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            document.getElementById('uploadResult').innerHTML = '⏳ 正在解析...';
+
+            fetch('http://localhost:5000/api/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('uploadResult').innerHTML = 
+                        '<div class="error">❌ ' + data.error + '</div>';
+                    return;
+                }
+                
+                currentChapters = data.chapters;
+                document.getElementById('uploadResult').innerHTML = 
+                    '✅ 解析成功！共 ' + data.total_chapters + ' 章';
+                
+                // 显示章节列表
+                showChapters(data.chapters);
+            })
+            .catch(err => {
+                document.getElementById('uploadResult').innerHTML = 
+                    '<div class="error">❌ 错误：' + err + '</div>';
+            });
+        }
+
+        // 显示章节勾选列表
+        function showChapters(chapters) {
+            const box = document.getElementById('chapterBox');
+            const list = document.getElementById('chapterList');
+            box.style.display = 'block';
+            
+            list.innerHTML = chapters.map(ch => `
+                <div class="chapter-item">
+                    <label>
+                        <input type="checkbox" value="${ch.id}" class="chapter-check">
+                        <strong>${ch.title}</strong>
+                        <span style="color:#666;font-size:12px;">${ch.content}</span>
+                    </label>
+                </div>
+            `).join('');
+        }
+
+        // 开始转换（先占位）
+        function startConvert() {
+            const checked = document.querySelectorAll('.chapter-check:checked');
+            if (checked.length < 1) {
+                alert('请至少选择1章（比赛要求3章以上，演示时选1章也行）');
+                return;
+            }
+            alert('下一步：调用AI转换。我们先commit这一步。');
         }
     </script>
 </body>
