@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI小说转剧本工具</title>
+    <style>
+        body { font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .box { border: 2px solid #007acc; padding: 20px; border-radius: 10px; margin-top: 20px; }
+        button { background: #007acc; color: white; border: none; padding: 10px 20px; cursor: pointer; }
+        #result { margin-top: 20px; color: green; }
+    </style>
+</head>
+<body>
+    <h1>🎬 AI 小说转剧本工具</h1>
+    
+    <div class="box">
+        <h3>步骤 1：测试连接</h3>
+        <button onclick="testServer()">点击测试服务器</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // 调用后端测试接口
+        function testServer() {
+            fetch('http://localhost:5000/api/hello')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('result').innerHTML = 
+                        '✅ ' + data.message;
+                })
+                .catch(err => {
+                    document.getElementById('result').innerHTML = 
+                        '❌ 错误：' + err;
+                });
+        }
+    </script>
+</body>
+</html>
