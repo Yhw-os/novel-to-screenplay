@@ -27,10 +27,13 @@ python app.py
 novel-to-screenplay/
 ├── app.py                 # Flask 后端
 ├── static/index.html      # 前端页面
-├── docs/                  # 设计文档
-├── schema/                # YAML Schema + 示例
+├── schema/              
+    ├── docs/schema_design.md # YAML Schema设计文档
+    ├── examples/example_shortcut.yaml # YAML Schema示例
+├── requirements.txt        # 依赖包
 └── README.md
 演示视频
+https://www.bilibili.com/video/BV1R57D62EWk/?vd_source=5bea27644f81e8946059ccd33d22adae#reply116702666886080
 
 
 
